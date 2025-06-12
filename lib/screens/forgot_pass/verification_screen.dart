@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:gauge_haus/screens/forgot_pass/reset_password_screen.dart';
+import 'package:gauge_haus/shared/dio_helper.dart';
+import 'package:gauge_haus/shared/url_constants.dart';
+import 'package:dio/dio.dart';
 
 class VerificationScreen extends StatefulWidget {
   final String email;
@@ -16,6 +19,7 @@ class _VerificationScreenState extends State<VerificationScreen>
       List.generate(6, (index) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(6, (index) => FocusNode());
   bool isLoading = false;
+  bool isResending = false;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -68,26 +72,160 @@ class _VerificationScreenState extends State<VerificationScreen>
       isLoading = true;
     });
 
-    // Simulate verification
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      // Make actual API call to verify OTP
+      final response = await DioHelper.postData(
+        url: UrlConstants.verifyOTP,
+        data: {
+          "email": widget.email,
+          "otp": code,
+        },
+      );
 
-    setState(() {
-      isLoading = false;
-    });
+      setState(() {
+        isLoading = false;
+      });
 
-    _showMessage('Code verified successfully!');
+      // Check if the request was successful
+      if (response.statusCode == 200) {
+        _showMessage('Code verified successfully!');
 
-    // Navigate to reset password screen
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ResetPasswordScreen(email: widget.email),
-      ),
-    );
+        // Navigate to reset password screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ResetPasswordScreen(email: widget.email),
+          ),
+        );
+      } else {
+        // Handle error response
+        String errorMessage = 'Invalid verification code. Please try again.';
+        if (response.data != null && response.data is Map<String, dynamic>) {
+          final errorData = response.data as Map<String, dynamic>;
+          if (errorData['message'] != null) {
+            errorMessage = errorData['message'].toString();
+          }
+        }
+        _showMessage(errorMessage, isError: true);
+      }
+    } on DioException catch (e) {
+      setState(() {
+        isLoading = false;
+      });
+
+      String errorMessage = 'An error occurred. Please try again.';
+
+      if (e.response != null) {
+        if (e.response!.statusCode == 400) {
+          errorMessage =
+              'Invalid verification code. Please check and try again.';
+        } else if (e.response!.statusCode == 404) {
+          errorMessage = 'Verification code not found or expired.';
+        } else if (e.response!.statusCode == 410) {
+          errorMessage =
+              'Verification code has expired. Please request a new one.';
+        } else if (e.response!.data != null &&
+            e.response!.data is Map<String, dynamic>) {
+          final errorData = e.response!.data as Map<String, dynamic>;
+          if (errorData['message'] != null) {
+            errorMessage = errorData['message'].toString();
+          }
+        }
+      } else if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        errorMessage =
+            'Connection timeout. Please check your internet connection.';
+      } else if (e.type == DioExceptionType.connectionError) {
+        errorMessage = 'No internet connection. Please check your network.';
+      }
+
+      _showMessage(errorMessage, isError: true);
+    } catch (e) {
+      setState(() {
+        isLoading = false;
+      });
+      _showMessage('An unexpected error occurred. Please try again.',
+          isError: true);
+    }
   }
 
   Future<void> _handleResendCode() async {
-    _showMessage('Verification code sent again!');
+    setState(() {
+      isResending = true;
+    });
+
+    try {
+      // Make actual API call to forgot password endpoint to resend code
+      final response = await DioHelper.postData(
+        url: UrlConstants.forgetPassword,
+        data: {
+          "email": widget.email,
+        },
+      );
+
+      setState(() {
+        isResending = false;
+      });
+
+      // Check if the request was successful
+      if (response.statusCode == 200) {
+        _showMessage('Verification code sent again to your email!');
+
+        // Clear the current input fields
+        for (var controller in _controllers) {
+          controller.clear();
+        }
+        // Focus on the first input field
+        _focusNodes[0].requestFocus();
+      } else {
+        // Handle error response
+        String errorMessage =
+            'Failed to resend verification code. Please try again.';
+        if (response.data != null && response.data is Map<String, dynamic>) {
+          final errorData = response.data as Map<String, dynamic>;
+          if (errorData['message'] != null) {
+            errorMessage = errorData['message'].toString();
+          }
+        }
+        _showMessage(errorMessage, isError: true);
+      }
+    } on DioException catch (e) {
+      setState(() {
+        isResending = false;
+      });
+
+      String errorMessage = 'An error occurred. Please try again.';
+
+      if (e.response != null) {
+        if (e.response!.statusCode == 404) {
+          errorMessage = 'Email address not found. Please check your email.';
+        } else if (e.response!.statusCode == 400) {
+          errorMessage = 'Invalid email address format.';
+        } else if (e.response!.data != null &&
+            e.response!.data is Map<String, dynamic>) {
+          final errorData = e.response!.data as Map<String, dynamic>;
+          if (errorData['message'] != null) {
+            errorMessage = errorData['message'].toString();
+          }
+        }
+      } else if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        errorMessage =
+            'Connection timeout. Please check your internet connection.';
+      } else if (e.type == DioExceptionType.connectionError) {
+        errorMessage = 'No internet connection. Please check your network.';
+      }
+
+      _showMessage(errorMessage, isError: true);
+    } catch (e) {
+      setState(() {
+        isResending = false;
+      });
+      _showMessage('An unexpected error occurred. Please try again.',
+          isError: true);
+    }
   }
 
   void _showMessage(String message, {bool isError = false}) {
@@ -266,14 +404,37 @@ class _VerificationScreenState extends State<VerificationScreen>
 
                               // Resend Code
                               TextButton(
-                                onPressed: _handleResendCode,
-                                child: const Text(
-                                  'Didn\'t receive code? Resend',
-                                  style: TextStyle(
-                                    color: Color(0xFF583B2D),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
+                                onPressed:
+                                    isResending ? null : _handleResendCode,
+                                child: isResending
+                                    ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: const [
+                                          SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Color(0xFF583B2D),
+                                            ),
+                                          ),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            'Sending...',
+                                            style: TextStyle(
+                                              color: Color(0xFF583B2D),
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : const Text(
+                                        'Didn\'t receive code? Resend',
+                                        style: TextStyle(
+                                          color: Color(0xFF583B2D),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
                               ),
                             ],
                           ),

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gauge_haus/app_cubit/app_cubit.dart';
+import 'package:gauge_haus/app_cubit/app_states.dart';
 import 'package:gauge_haus/widgets/map_location_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geocoding/geocoding.dart';
@@ -46,13 +49,10 @@ class _SellStateScreenState extends State<SellStateScreen>
 
   // Property types
   final List<String> _propertyTypes = [
-    'Apartment',
-    'Villa',
-    'House',
     'Studio',
-    'Penthouse',
+    'Apartment',
     'Duplex',
-    'Townhouse'
+    'Penthouse'
   ];
 
   // Cities
@@ -188,15 +188,13 @@ class _SellStateScreenState extends State<SellStateScreen>
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    // Call the sellEstate method from AppCubit
+    final cubit = AppCubit.get(context);
 
-    // Create and use the estate data object
-    final estateData = {
-      "title": _titleController.text,
-      "propertyType": _selectedPropertyType,
-      "location": {
+    await cubit.sellEstate(
+      title: _titleController.text,
+      propertyType: _selectedPropertyType,
+      location: {
         "type": "Point",
         "coordinates": [
           double.tryParse(_longitudeController.text) ?? 31.2357,
@@ -205,35 +203,28 @@ class _SellStateScreenState extends State<SellStateScreen>
         "address": _addressController.text,
         "city": _selectedCity
       },
-      "price": int.tryParse(_priceController.text) ?? 0,
-      "description": _descriptionController.text,
-      "bedrooms": int.tryParse(_bedroomsController.text) ?? 0,
-      "bathrooms": int.tryParse(_bathroomsController.text) ?? 0,
-      "livingrooms": int.tryParse(_livingroomsController.text) ?? 0,
-      "kitchen": int.tryParse(_kitchenController.text) ?? 0,
-      "area": int.tryParse(_areaController.text) ?? 0,
-      "compoundName": _compoundNameController.text,
-      "furnished": _isFurnished,
-      "deliveryDate": _deliveryDateController.text,
-      "images": _selectedImages
-    };
-
-    // Simulate API call - here you would typically send estateData to your backend
-    print('Estate Data: $estateData'); // For debugging
-    await Future.delayed(const Duration(seconds: 2));
-
-    setState(() {
-      _isLoading = false;
-    });
-
-    // Show success message
-    _showSuccessMessage();
+      price: int.tryParse(_priceController.text) ?? 0,
+      description: _descriptionController.text,
+      bedrooms: int.tryParse(_bedroomsController.text) ?? 0,
+      bathrooms: int.tryParse(_bathroomsController.text) ?? 0,
+      livingrooms: int.tryParse(_livingroomsController.text) ?? 0,
+      kitchen: int.tryParse(_kitchenController.text) ?? 0,
+      area: int.tryParse(_areaController.text) ?? 0,
+      compoundName: _compoundNameController.text.isEmpty
+          ? null
+          : _compoundNameController.text,
+      furnished: _isFurnished,
+      deliveryDate: _deliveryDateController.text.isEmpty
+          ? null
+          : _deliveryDateController.text,
+      imagePaths: _selectedImages.isNotEmpty ? _selectedImages : null,
+    );
   }
 
-  void _showSuccessMessage() {
+  void _showSuccessMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Property listed successfully!'),
+        content: Text(message),
         backgroundColor: const Color(0xFF8D6E63),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -241,14 +232,25 @@ class _SellStateScreenState extends State<SellStateScreen>
           label: 'View',
           textColor: Colors.white,
           onPressed: () {
-            // Navigate to property details or listings
+            Navigator.pop(context);
           },
         ),
       ),
     );
   }
 
-  void _openMapPicker() async {
+  void _showErrorMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  Future<void> _openMapPicker() async {
     final currentLat = double.tryParse(_latitudeController.text) ?? 30.0444;
     final currentLng = double.tryParse(_longitudeController.text) ?? 31.2357;
 
@@ -314,85 +316,108 @@ class _SellStateScreenState extends State<SellStateScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F1EC),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: SafeArea(
-            child: Column(
-              children: [
-                _buildHeader(),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(20.w),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildSectionTitle('Property Information'),
-                          SizedBox(height: 16.h),
-                          _buildTitleField(),
-                          SizedBox(height: 16.h),
-                          _buildPropertyTypeDropdown(),
-                          SizedBox(height: 16.h),
-                          _buildPriceField(),
-                          SizedBox(height: 16.h),
-                          _buildDescriptionField(),
-                          SizedBox(height: 24.h),
-                          _buildSectionTitle('Property Details'),
-                          SizedBox(height: 16.h),
-                          Row(
-                            children: [
-                              Expanded(child: _buildBedroomsField()),
-                              SizedBox(width: 16.w),
-                              Expanded(child: _buildBathroomsField()),
-                            ],
-                          ),
-                          SizedBox(height: 16.h),
-                          Row(
-                            children: [
-                              Expanded(child: _buildLivingroomsField()),
-                              SizedBox(width: 16.w),
-                              Expanded(child: _buildKitchenField()),
-                            ],
-                          ),
-                          SizedBox(height: 16.h),
-                          _buildAreaField(),
-                          SizedBox(height: 24.h),
-                          _buildSectionTitle('Location Details'),
-                          SizedBox(height: 16.h),
-                          _buildCityDropdown(),
-                          SizedBox(height: 16.h),
-                          _buildAddressField(),
-                          SizedBox(height: 16.h),
-                          _buildCompoundNameField(),
-                          SizedBox(height: 16.h),
-                          Row(
-                            children: [
-                              Expanded(child: _buildLatitudeField()),
-                              SizedBox(width: 16.w),
-                              Expanded(child: _buildLongitudeField()),
-                            ],
-                          ),
-                          SizedBox(height: 24.h),
-                          _buildSectionTitle('Additional Information'),
-                          SizedBox(height: 16.h),
-                          _buildFurnishedCheckbox(),
-                          SizedBox(height: 16.h),
-                          _buildDeliveryDateField(),
-                          SizedBox(height: 16.h),
-                          _buildImageSelector(),
-                          SizedBox(height: 32.h),
-                          _buildSubmitButton(),
-                        ],
+    return BlocListener<AppCubit, AppCubitState>(
+      listener: (context, state) {
+        if (state is SellEstateLoadingState) {
+          setState(() {
+            _isLoading = true;
+          });
+        } else if (state is SellEstateSuccessState) {
+          setState(() {
+            _isLoading = false;
+          });
+          _showSuccessMessage(state.message);
+          // Navigate back after successful listing
+          Future.delayed(const Duration(seconds: 2), () {
+            Navigator.pop(context);
+          });
+        } else if (state is SellEstateErrorState) {
+          setState(() {
+            _isLoading = false;
+          });
+          _showErrorMessage(state.error);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F1EC),
+        body: FadeTransition(
+          opacity: _fadeAnimation,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: SafeArea(
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.all(20.w),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildSectionTitle('Property Information'),
+                            SizedBox(height: 16.h),
+                            _buildTitleField(),
+                            SizedBox(height: 16.h),
+                            _buildPropertyTypeDropdown(),
+                            SizedBox(height: 16.h),
+                            _buildPriceField(),
+                            SizedBox(height: 16.h),
+                            _buildDescriptionField(),
+                            SizedBox(height: 24.h),
+                            _buildSectionTitle('Property Details'),
+                            SizedBox(height: 16.h),
+                            Row(
+                              children: [
+                                Expanded(child: _buildBedroomsField()),
+                                SizedBox(width: 16.w),
+                                Expanded(child: _buildBathroomsField()),
+                              ],
+                            ),
+                            SizedBox(height: 16.h),
+                            Row(
+                              children: [
+                                Expanded(child: _buildLivingroomsField()),
+                                SizedBox(width: 16.w),
+                                Expanded(child: _buildKitchenField()),
+                              ],
+                            ),
+                            SizedBox(height: 16.h),
+                            _buildAreaField(),
+                            SizedBox(height: 24.h),
+                            _buildSectionTitle('Location Details'),
+                            SizedBox(height: 16.h),
+                            _buildCityDropdown(),
+                            SizedBox(height: 16.h),
+                            _buildAddressField(),
+                            SizedBox(height: 16.h),
+                            _buildCompoundNameField(),
+                            SizedBox(height: 16.h),
+                            Row(
+                              children: [
+                                Expanded(child: _buildLatitudeField()),
+                                SizedBox(width: 16.w),
+                                Expanded(child: _buildLongitudeField()),
+                              ],
+                            ),
+                            SizedBox(height: 24.h),
+                            _buildSectionTitle('Additional Information'),
+                            SizedBox(height: 16.h),
+                            _buildFurnishedCheckbox(),
+                            SizedBox(height: 16.h),
+                            _buildDeliveryDateField(),
+                            SizedBox(height: 16.h),
+                            _buildImageSelector(),
+                            SizedBox(height: 32.h),
+                            _buildSubmitButton(),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gauge_haus/app_cubit/app_cubit.dart';
+import 'package:gauge_haus/app_cubit/app_states.dart';
 import 'package:gauge_haus/screens/register_screen.dart';
 import 'package:gauge_haus/screens/forgot_pass/forgot_password_screen.dart';
 import 'package:gauge_haus/screens/home_screen.dart';
@@ -16,7 +19,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _passwordController = TextEditingController();
   bool isPasswordVisible = false;
   bool isChecked = false;
-  bool isLoading = false;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -61,30 +63,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
+  void _handleLogin() {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       _showMessage('Please fill all fields', isError: true);
       return;
     }
 
-    setState(() {
-      isLoading = true;
-    });
-
-    // Simulate login process
-    await Future.delayed(const Duration(seconds: 2));
-
-    setState(() {
-      isLoading = false;
-    });
-
-    _showMessage('Login successful!');
-
-    // Navigate to home screen after successful login
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-          builder: (context) => const HomeScreen()), // بدلاً من HomePage
+    // Use AppCubit to handle login
+    AppCubit.get(context).login(
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
     );
   }
 
@@ -118,172 +106,192 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16.r),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 10.r,
-                          offset: Offset(0, 5.h),
+              child: BlocConsumer<AppCubit, AppCubitState>(
+                listener: (context, state) {
+                  if (state is LoginSuccessState) {
+                    _showMessage('Login successful!');
+                    // Navigate to home screen after successful login
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const HomeScreen()),
+                    );
+                  } else if (state is LoginErrorState) {
+                    _showMessage(state.error, isError: true);
+                  }
+                },
+                builder: (context, state) {
+                  final isLoading = state is LoginLoadingState;
+
+                  return FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: SlideTransition(
+                      position: _slideAnimation,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16.r),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10.r,
+                              offset: Offset(0, 5.h),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    margin:
-                        EdgeInsets.symmetric(horizontal: 16.w, vertical: 50.h),
-                    child: Padding(
-                      padding: EdgeInsets.all(24.w),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Login Title
-                          Text(
-                            'Login',
-                            style: TextStyle(
-                              fontSize: 28.sp,
-                              color: Colors.black,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: 8.h),
-                          Text(
-                            'Welcome back to Gauge Haus',
-                            style: TextStyle(
-                              fontSize: 14.sp,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          SizedBox(height: 30.h),
-
-                          // Email Field
-                          CustomTextField(
-                            controller: _emailController,
-                            label: 'Email',
-                            hintText: 'Enter your email',
-                            icon: Icons.email_outlined,
-                            keyboardType: TextInputType.emailAddress,
-                          ),
-                          SizedBox(height: 16.h),
-
-                          // Password Field
-                          CustomTextField(
-                            controller: _passwordController,
-                            label: 'Password',
-                            hintText: 'Enter your password',
-                            icon: Icons.lock_outline,
-                            isPassword: true,
-                            isPasswordVisible: isPasswordVisible,
-                            onPasswordToggle: () {
-                              setState(() {
-                                isPasswordVisible = !isPasswordVisible;
-                              });
-                            },
-                          ),
-                          SizedBox(height: 8.h),
-
-                          // Forgot Password
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (context) =>
-                                          const ForgotPasswordScreen()),
-                                );
-                              },
-                              child: Text(
-                                'Forgot Password?',
-                                style: TextStyle(
-                                  color: const Color(0xFF583B2D),
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 14.sp,
-                                ),
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: 24.h),
-
-                          // Login Button
-                          SizedBox(
-                            width: double.infinity,
-                            height: 50.h,
-                            child: ElevatedButton(
-                              onPressed: isLoading ? null : _handleLogin,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF583B2D),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12.r),
-                                ),
-                                elevation: 2,
-                              ),
-                              child: isLoading
-                                  ? SizedBox(
-                                      width: 20.w,
-                                      height: 20.h,
-                                      child: const CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                                Colors.white),
-                                      ),
-                                    )
-                                  : Text(
-                                      'LOGIN',
-                                      style: TextStyle(
-                                        fontSize: 16.sp,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                          SizedBox(height: 32.h),
-
-                          // Sign Up Link
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                        margin: EdgeInsets.symmetric(
+                            horizontal: 16.w, vertical: 50.h),
+                        child: Padding(
+                          padding: EdgeInsets.all(24.w),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
+                              // Login Title
                               Text(
-                                "Don't have an account? ",
+                                'Login',
                                 style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 14.sp,
+                                  fontSize: 28.sp,
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (context) =>
-                                            const RegisterPage()),
-                                  );
+                              SizedBox(height: 8.h),
+                              Text(
+                                'Welcome back to Gauge Haus',
+                                style: TextStyle(
+                                  fontSize: 14.sp,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              SizedBox(height: 30.h),
+
+                              // Email Field
+                              CustomTextField(
+                                controller: _emailController,
+                                label: 'Email',
+                                hintText: 'Enter your email',
+                                icon: Icons.email_outlined,
+                                keyboardType: TextInputType.emailAddress,
+                              ),
+                              SizedBox(height: 16.h),
+
+                              // Password Field
+                              CustomTextField(
+                                controller: _passwordController,
+                                label: 'Password',
+                                hintText: 'Enter your password',
+                                icon: Icons.lock_outline,
+                                isPassword: true,
+                                isPasswordVisible: isPasswordVisible,
+                                onPasswordToggle: () {
+                                  setState(() {
+                                    isPasswordVisible = !isPasswordVisible;
+                                  });
                                 },
-                                child: Text(
-                                  'Sign Up',
-                                  style: TextStyle(
-                                    color: const Color(0xFF583B2D),
-                                    fontSize: 14.sp,
-                                    fontWeight: FontWeight.bold,
-                                    decoration: TextDecoration.underline,
+                              ),
+                              SizedBox(height: 8.h),
+
+                              // Forgot Password
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (context) =>
+                                              const ForgotPasswordScreen()),
+                                    );
+                                  },
+                                  child: Text(
+                                    'Forgot Password?',
+                                    style: TextStyle(
+                                      color: const Color(0xFF583B2D),
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 14.sp,
+                                    ),
                                   ),
                                 ),
                               ),
+                              SizedBox(height: 24.h),
+
+                              // Login Button
+                              SizedBox(
+                                width: double.infinity,
+                                height: 50.h,
+                                child: ElevatedButton(
+                                  onPressed: isLoading ? null : _handleLogin,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF583B2D),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12.r),
+                                    ),
+                                    elevation: 2,
+                                  ),
+                                  child: isLoading
+                                      ? SizedBox(
+                                          width: 20.w,
+                                          height: 20.h,
+                                          child:
+                                              const CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                    Colors.white),
+                                          ),
+                                        )
+                                      : Text(
+                                          'LOGIN',
+                                          style: TextStyle(
+                                            fontSize: 16.sp,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 1,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              SizedBox(height: 32.h),
+
+                              // Sign Up Link
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    "Don't have an account? ",
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 14.sp,
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (context) =>
+                                                const RegisterPage()),
+                                      );
+                                    },
+                                    child: Text(
+                                      'Sign Up',
+                                      style: TextStyle(
+                                        color: const Color(0xFF583B2D),
+                                        fontSize: 14.sp,
+                                        fontWeight: FontWeight.bold,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
           ),
@@ -369,18 +377,6 @@ class CustomTextField extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class LoginScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Login')),
-      body: Center(
-        child: Text('Login Screen'),
-      ),
     );
   }
 }

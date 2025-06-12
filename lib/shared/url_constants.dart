@@ -1,7 +1,7 @@
 class UrlConstants {
-  static const String baseUrl = 'https://gaugehaus.vercel.app/api/';
+  static const String baseUrl = 'https://gaugehaus.vercel.app/api';
   static const String loginEndpoint = '/auth/login';
-  static const String registerEndpoint = '/auth/signup';
+  static const String registerEndpoint = '/auth/signin';
   static const String verifyOTP = '/auth/verifyOTP';
   static const String forgetPassword = '/auth/forgetPassword';
   static const String resetPassword = '/auth/resetPassword';
@@ -22,13 +22,16 @@ class UrlConstants {
       'estates/nearest-estates/$lat,$long';
   static String getEstatesByDistance(
           double distance, double lat, double lng, String unit) =>
-      '/estates/distance/$distance/lanlng/$lat,$lng/unit/$unit';
+      '/estates/distance/$distance/latlng/$lat,$lng/unit/$unit';
 
   static const String myEstates = '/estates/my-estates';
+  static String getLikedEstates(String userId) =>
+      '/estates/liked-estates/$userId';
 
   // user
   static const String updateUser = '/users/updateMe';
   static const String deleteMe = '/users/deleteMe';
+  static String getUserById(String userId) => '/users/$userId';
 
   // prediction
   static const String makePredictionOfPrice =

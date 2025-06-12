@@ -3,8 +3,10 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gauge_haus/screens/login_screen.dart';
 import 'dart:async';
 
+import 'package:gauge_haus/shared/cache_helper.dart';
+
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({Key? key}) : super(key: key);
+  const OnboardingScreen({super.key});
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -278,38 +280,74 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // Enhanced Skip button
+              // Enhanced top navigation with back and skip buttons
               Padding(
                 padding: EdgeInsets.all(20.w),
-                child: Align(
-                  alignment: Alignment.topRight,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(25.r),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
-                        width: 1.w,
-                      ),
-                    ),
-                    child: TextButton(
-                      onPressed: () => _navigateToLogin(),
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 20.w,
-                          vertical: 8.h,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Back button on the left
+                    if (_currentPage > 0)
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(25.r),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.3),
+                            width: 1.w,
+                          ),
+                        ),
+                        child: IconButton(
+                          onPressed: () {
+                            _pageController.previousPage(
+                              duration: const Duration(milliseconds: 400),
+                              curve: Curves.easeInOut,
+                            );
+                          },
+                          icon: Icon(
+                            Icons.arrow_back_ios_new,
+                            color: Colors.white,
+                            size: 20.sp,
+                          ),
+                          style: IconButton.styleFrom(
+                            padding: EdgeInsets.all(12.w),
+                          ),
+                        ),
+                      )
+                    else
+                      SizedBox(
+                          width: 50
+                              .w), // Adjusted placeholder size for icon button
+
+                    // Skip button on the right
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(25.r),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                          width: 1.w,
                         ),
                       ),
-                      child: Text(
-                        'Skip',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16.sp,
-                          fontWeight: FontWeight.w600,
+                      child: TextButton(
+                        onPressed: () => _navigateToLogin(),
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 20.w,
+                            vertical: 8.h,
+                          ),
+                        ),
+                        child: Text(
+                          'Skip',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
 
@@ -477,8 +515,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         ],
                       ),
                       child: ElevatedButton(
-                        onPressed: () {
+                        onPressed: () async {
                           if (_currentPage == _onboardingData.length - 1) {
+                            await CacheHelper.saveData(
+                                key: 'onBoarding', value: true);
+
                             _navigateToLogin();
                           } else {
                             _pageController.nextPage(
@@ -507,47 +548,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         ),
                       ),
                     ),
-
-                    // Enhanced Back button
-                    if (_currentPage > 0) ...[
-                      SizedBox(height: 16.h),
-                      TextButton(
-                        onPressed: () {
-                          _pageController.previousPage(
-                            duration: const Duration(milliseconds: 400),
-                            curve: Curves.easeInOut,
-                          );
-                        },
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 24.w,
-                            vertical: 12.h,
-                          ),
-                        ),
-                        child: Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 20.w,
-                            vertical: 8.h,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20.r),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.2),
-                              width: 1.w,
-                            ),
-                          ),
-                          child: Text(
-                            'Back',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16.sp,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -558,7 +558,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  void _navigateToLogin() {
+  void _navigateToLogin() async {
+    await CacheHelper.saveData(key: 'onBoarding', value: true);
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (context) => const LoginPage()),

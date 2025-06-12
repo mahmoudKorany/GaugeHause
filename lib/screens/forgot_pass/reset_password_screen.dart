@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:gauge_haus/screens/login_screen.dart';
+import 'package:gauge_haus/shared/dio_helper.dart';
+import 'package:gauge_haus/shared/url_constants.dart';
+import 'package:gauge_haus/shared/cache_helper.dart';
+import 'package:dio/dio.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   final String email;
@@ -73,21 +77,89 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
       isLoading = true;
     });
 
-    // Simulate password reset
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      // Make actual API call to reset password endpoint
+      final response = await DioHelper.postData(
+        url: UrlConstants.resetPassword,
+        data: {
+          "email": widget.email,
+          "password": _passwordController.text,
+          "confirmedPassword": _confirmPasswordController.text,
+        },
+      );
 
-    setState(() {
-      isLoading = false;
-    });
+      setState(() {
+        isLoading = false;
+      });
 
-    _showMessage('Password reset successfully!');
+      // Check if the request was successful
+      if (response.statusCode == 200) {
+        final responseData = response.data as Map<String, dynamic>;
 
-    // Navigate to login screen
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginPage()),
-      (route) => false,
-    );
+        // Save the token if provided
+        if (responseData['token'] != null) {
+          await CacheHelper.saveData(
+              key: 'token', value: responseData['token']);
+        }
+
+        _showMessage(responseData['message'] ?? 'Password reset successfully!');
+
+        // Navigate to login screen
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+          (route) => false,
+        );
+      } else {
+        // Handle error response
+        String errorMessage = 'Failed to reset password. Please try again.';
+        if (response.data != null && response.data is Map<String, dynamic>) {
+          final errorData = response.data as Map<String, dynamic>;
+          if (errorData['message'] != null) {
+            errorMessage = errorData['message'].toString();
+          }
+        }
+        _showMessage(errorMessage, isError: true);
+      }
+    } on DioException catch (e) {
+      setState(() {
+        isLoading = false;
+      });
+
+      String errorMessage = 'An error occurred. Please try again.';
+
+      if (e.response != null) {
+        if (e.response!.statusCode == 400) {
+          errorMessage = 'Invalid password format or passwords do not match.';
+        } else if (e.response!.statusCode == 404) {
+          errorMessage = 'Email address not found. Please try again.';
+        } else if (e.response!.statusCode == 410) {
+          errorMessage =
+              'Reset token has expired. Please request a new reset code.';
+        } else if (e.response!.data != null &&
+            e.response!.data is Map<String, dynamic>) {
+          final errorData = e.response!.data as Map<String, dynamic>;
+          if (errorData['message'] != null) {
+            errorMessage = errorData['message'].toString();
+          }
+        }
+      } else if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        errorMessage =
+            'Connection timeout. Please check your internet connection.';
+      } else if (e.type == DioExceptionType.connectionError) {
+        errorMessage = 'No internet connection. Please check your network.';
+      }
+
+      _showMessage(errorMessage, isError: true);
+    } catch (e) {
+      setState(() {
+        isLoading = false;
+      });
+      _showMessage('An unexpected error occurred. Please try again.',
+          isError: true);
+    }
   }
 
   void _showMessage(String message, {bool isError = false}) {

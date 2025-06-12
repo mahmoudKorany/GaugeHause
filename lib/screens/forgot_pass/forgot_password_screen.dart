@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gauge_haus/screens/forgot_pass/verification_screen.dart';
+import 'package:gauge_haus/shared/dio_helper.dart';
+import 'package:gauge_haus/shared/url_constants.dart';
+import 'package:dio/dio.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -71,22 +74,79 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
       isLoading = true;
     });
 
-    // Simulate sending code
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      // Make actual API call to forgot password endpoint
+      final response = await DioHelper.postData(
+        url: UrlConstants.forgetPassword,
+        data: {
+          "email": _emailController.text.trim(),
+        },
+      );
 
-    setState(() {
-      isLoading = false;
-    });
+      setState(() {
+        isLoading = false;
+      });
 
-    _showMessage('Verification code sent to your email!');
+      // Check if the request was successful
+      if (response.statusCode == 200) {
+        _showMessage('Verification code sent to your email!');
 
-    // Navigate to verification screen
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => VerificationScreen(email: _emailController.text),
-      ),
-    );
+        // Navigate to verification screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                VerificationScreen(email: _emailController.text),
+          ),
+        );
+      } else {
+        // Handle error response
+        String errorMessage =
+            'Failed to send verification code. Please try again.';
+        if (response.data != null && response.data is Map<String, dynamic>) {
+          final errorData = response.data as Map<String, dynamic>;
+          if (errorData['message'] != null) {
+            errorMessage = errorData['message'].toString();
+          }
+        }
+        _showMessage(errorMessage, isError: true);
+      }
+    } on DioException catch (e) {
+      setState(() {
+        isLoading = false;
+      });
+
+      String errorMessage = 'An error occurred. Please try again.';
+
+      if (e.response != null) {
+        if (e.response!.statusCode == 404) {
+          errorMessage = 'Email address not found. Please check your email.';
+        } else if (e.response!.statusCode == 400) {
+          errorMessage = 'Invalid email address format.';
+        } else if (e.response!.data != null &&
+            e.response!.data is Map<String, dynamic>) {
+          final errorData = e.response!.data as Map<String, dynamic>;
+          if (errorData['message'] != null) {
+            errorMessage = errorData['message'].toString();
+          }
+        }
+      } else if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        errorMessage =
+            'Connection timeout. Please check your internet connection.';
+      } else if (e.type == DioExceptionType.connectionError) {
+        errorMessage = 'No internet connection. Please check your network.';
+      }
+
+      _showMessage(errorMessage, isError: true);
+    } catch (e) {
+      setState(() {
+        isLoading = false;
+      });
+      _showMessage('An unexpected error occurred. Please try again.',
+          isError: true);
+    }
   }
 
   void _showMessage(String message, {bool isError = false}) {
