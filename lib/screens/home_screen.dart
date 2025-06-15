@@ -172,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildHeader() {
     var cubit = AppCubit.get(context);
     return Container(
-      height: 220.h,
+      height: 240.h,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF86755B), Color(0xFFC2BAA5)],

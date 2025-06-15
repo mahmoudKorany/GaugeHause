@@ -25,11 +25,10 @@ class SearchPage extends StatefulWidget {
 }
 
 class _SearchPageState extends State<SearchPage> {
-  final TextEditingController _searchController = TextEditingController();
   final TextEditingController _distanceController =
       TextEditingController(text: '5');
 
-  List<Estate> _searchResults = [];
+  List<String> _estateIds = [];
   bool _isLoading = false;
   String _selectedPropertyType = 'All';
   String _selectedUnit = 'km';
@@ -164,7 +163,6 @@ class _SearchPageState extends State<SearchPage> {
     });
 
     try {
-      // Using the new endpoint format: /estates/nearest/{lat},{lng}/unit/{unit}
       final response = await DioHelper.getData(
         url: '/estates/nearest/$_selectedLat,$_selectedLng/unit/$_selectedUnit',
         token: CacheHelper.getData(key: 'token'),
@@ -176,40 +174,33 @@ class _SearchPageState extends State<SearchPage> {
       if (response.statusCode == 200 &&
           response.data is Map<String, dynamic> &&
           response.data['status'] == 'success') {
-        final estatesData = response.data['data']['estates'] as List;
-        List<Estate> estates =
-            estatesData.map((estate) => Estate.fromJson(estate)).toList();
+        final nearestEstatesData =
+            response.data['data']['nearestEstates'] as List;
 
-        // Filter by property type if not "All"
-        if (_selectedPropertyType != 'All') {
-          estates = estates
-              .where((estate) =>
-                  estate.propertyType.toLowerCase() ==
-                  _selectedPropertyType.toLowerCase())
-              .toList();
+        if (nearestEstatesData.isEmpty) {
+          setState(() {
+            _estateIds = [];
+            _isLoading = false;
+          });
+          _showMessage('No estates found in the specified area');
+          return;
         }
 
-        // Filter by search query if provided
-        if (_searchController.text.isNotEmpty) {
-          final query = _searchController.text.toLowerCase();
-          estates = estates
-              .where((estate) =>
-                  estate.title.toLowerCase().contains(query) ||
-                  estate.description.toLowerCase().contains(query) ||
-                  estate.compoundName.toLowerCase().contains(query))
-              .toList();
-        }
+        // Extract only the IDs
+        List<String> estateIds = nearestEstatesData
+            .map((estateData) => estateData['_id'] as String)
+            .toList();
 
         setState(() {
-          _searchResults = estates;
+          _estateIds = estateIds;
           _isLoading = false;
         });
 
         _showMessage(
-            'Found ${estates.length} estates within $distance $_selectedUnit');
+            'Found ${estateIds.length} estates within $distance $_selectedUnit');
       } else {
         setState(() {
-          _searchResults = [];
+          _estateIds = [];
           _isLoading = false;
         });
         _showMessage('No estates found in the specified area', isError: true);
@@ -220,6 +211,189 @@ class _SearchPageState extends State<SearchPage> {
       });
       _showMessage('Error searching estates: $e', isError: true);
     }
+  }
+
+  Future<void> _navigateToEstateDetails(String estateId) async {
+    try {
+      // Show enhanced loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black.withOpacity(0.7),
+        builder: (context) => _buildEnhancedLoadingDialog(estateId),
+      );
+
+      // Fetch estate details
+      final cubit = AppCubit.get(context);
+      final estate = await cubit.getEstateById(estateId);
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      if (estate != null) {
+        // Navigate to estate details with smooth transition
+        Navigator.push(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                EstateDetailsScreen(estate: estate),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              const begin = Offset(1.0, 0.0);
+              const end = Offset.zero;
+              const curve = Curves.easeInOutCubic;
+
+              var tween = Tween(begin: begin, end: end).chain(
+                CurveTween(curve: curve),
+              );
+
+              return SlideTransition(
+                position: animation.drive(tween),
+                child: child,
+              );
+            },
+            transitionDuration: const Duration(milliseconds: 300),
+          ),
+        );
+      } else {
+        _showMessage('Failed to load property details', isError: true);
+      }
+    } catch (e) {
+      // Close loading dialog if it's still open
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+      _showMessage('Error loading property: $e', isError: true);
+    }
+  }
+
+  Widget _buildEnhancedLoadingDialog(String estateId) {
+    return Center(
+      child: Container(
+        margin: EdgeInsets.symmetric(horizontal: 40.w),
+        padding: EdgeInsets.all(30.w),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20.r),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 30,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Material(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Animated Loading Indicator
+              Container(
+                width: 80.w,
+                height: 80.h,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF86755B), Color(0xFFA0947C)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(40.r),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF86755B).withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Outer rotating circle
+                    SizedBox(
+                      width: 60.w,
+                      height: 60.h,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        backgroundColor: Colors.white.withOpacity(0.3),
+                        strokeWidth: 3.w,
+                      ),
+                    ),
+                    // Inner icon
+                    Icon(
+                      Icons.home_rounded,
+                      color: Colors.white,
+                      size: 32.sp,
+                    ),
+                  ],
+                ),
+              ),
+              
+              SizedBox(height: 24.h),
+              
+              // Title
+              Text(
+                'Loading Property',
+                style: TextStyle(
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF2E2E2E),
+                ),
+              ),
+              
+              SizedBox(height: 8.h),
+              
+              // Subtitle with property ID
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF86755B).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20.r),
+                ),
+                child: Text(
+                  'ID: ${estateId.length > 8 ? estateId.substring(0, 8) : estateId}...',
+                  style: TextStyle(
+                    fontSize: 12.sp,
+                    color: const Color(0xFF86755B),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              
+              SizedBox(height: 16.h),
+              
+              // Loading message
+              Text(
+                'Fetching property details...',
+                style: TextStyle(
+                  fontSize: 14.sp,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              
+              SizedBox(height: 20.h),
+              
+              // Progress dots animation
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(3, (index) {
+                  return Container(
+                    margin: EdgeInsets.symmetric(horizontal: 4.w),
+                    width: 8.w,
+                    height: 8.h,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF86755B).withOpacity(0.3 + (index * 0.2)),
+                      borderRadius: BorderRadius.circular(4.r),
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showMessage(String message, {bool isError = false}) {
@@ -236,245 +410,423 @@ class _SearchPageState extends State<SearchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF8F6F3),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF86755B),
-        title:
-            const Text('Search Estates', style: TextStyle(color: Colors.white)),
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF86755B), Color(0xFFA0947C)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        title: const Text(
+          'Discover Properties',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          IconButton(
-            icon: Icon(_showMap ? Icons.list : Icons.map, color: Colors.white),
-            onPressed: () {
-              setState(() {
-                _showMap = !_showMap;
-              });
-            },
+          Container(
+            margin: EdgeInsets.only(right: 16.w),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12.r),
+            ),
+            child: IconButton(
+              icon: Icon(
+                _showMap ? Icons.view_list_rounded : Icons.map_rounded,
+                color: Colors.white,
+              ),
+              onPressed: () {
+                setState(() {
+                  _showMap = !_showMap;
+                });
+              },
+            ),
           ),
         ],
       ),
       body: Column(
         children: [
-          // Search Header
+          // Enhanced Search Header
           Container(
-            padding: EdgeInsets.all(16.w),
             decoration: const BoxDecoration(
-              color: Color(0xFF86755B),
+              gradient: LinearGradient(
+                colors: [Color(0xFF86755B), Color(0xFFA0947C)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(20),
+                bottomLeft: Radius.circular(30),
+                bottomRight: Radius.circular(30),
               ),
             ),
-            child: Column(
-              children: [
-                // Location Selection
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _showMap = !_showMap;
-                    });
-                  },
-                  child: Container(
-                    padding: EdgeInsets.all(16.w),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 20.h),
+              child: Column(
+                children: [
+                  // Location Selection Card
+                  Container(
+                    margin: EdgeInsets.only(bottom: 16.h),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(12.r),
-                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(16.r),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
                     ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.location_on, color: const Color(0xFF86755B)),
-                        SizedBox(width: 12.w),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            _showMap = !_showMap;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(16.r),
+                        child: Padding(
+                          padding: EdgeInsets.all(16.w),
+                          child: Row(
                             children: [
-                              Text(
-                                'Search Location',
-                                style: TextStyle(
-                                  fontSize: 12.sp,
-                                  color: Colors.grey[600],
+                              Container(
+                                padding: EdgeInsets.all(10.w),
+                                decoration: BoxDecoration(
+                                  color:
+                                      const Color(0xFF86755B).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10.r),
+                                ),
+                                child: Icon(
+                                  Icons.location_on_rounded,
+                                  color: const Color(0xFF86755B),
+                                  size: 20.sp,
                                 ),
                               ),
-                              Text(
-                                _selectedLocationName,
-                                style: TextStyle(
-                                  fontSize: 14.sp,
-                                  fontWeight: FontWeight.w500,
+                              SizedBox(width: 12.w),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Search Location',
+                                      style: TextStyle(
+                                        fontSize: 11.sp,
+                                        color: Colors.grey[500],
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    SizedBox(height: 2.h),
+                                    Text(
+                                      _selectedLocationName,
+                                      style: TextStyle(
+                                        fontSize: 14.sp,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF2E2E2E),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Container(
+                                padding: EdgeInsets.all(6.w),
+                                decoration: BoxDecoration(
+                                  color:
+                                      const Color(0xFF86755B).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6.r),
+                                ),
+                                child: Icon(
+                                  _showMap
+                                      ? Icons.keyboard_arrow_up_rounded
+                                      : Icons.keyboard_arrow_down_rounded,
+                                  color: const Color(0xFF86755B),
+                                  size: 18.sp,
+                                ),
                               ),
                             ],
                           ),
                         ),
-                        Icon(
-                          _showMap
-                              ? Icons.keyboard_arrow_up
-                              : Icons.keyboard_arrow_down,
-                          color: const Color(0xFF86755B),
+                      ),
+                    ),
+                  ),
+
+                  // Search Filters
+                  Container(
+                    padding: EdgeInsets.all(16.w),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16.r),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 12,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Search Filters',
+                          style: TextStyle(
+                            fontSize: 15.sp,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF2E2E2E),
+                          ),
+                        ),
+                        SizedBox(height: 12.h),
+
+                        // Property Type and Distance Row
+                        Row(
+                          children: [
+                            // Property Type
+                            Expanded(
+                              flex: 2,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Property Type',
+                                    style: TextStyle(
+                                      fontSize: 11.sp,
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  SizedBox(height: 6.h),
+                                  Container(
+                                    padding: EdgeInsets.symmetric(
+                                        horizontal: 12.w, vertical: 8.h),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF8F6F3),
+                                      borderRadius: BorderRadius.circular(10.r),
+                                      border: Border.all(
+                                        color: const Color(0xFF86755B)
+                                            .withOpacity(0.3),
+                                      ),
+                                    ),
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: _selectedPropertyType,
+                                        isExpanded: true,
+                                        dropdownColor: Colors.white,
+                                        isDense: true,
+                                        items:
+                                            _propertyTypes.map((String type) {
+                                          return DropdownMenuItem<String>(
+                                            value: type,
+                                            child: Text(
+                                              type,
+                                              style: TextStyle(
+                                                fontSize: 13.sp,
+                                                color: const Color(0xFF2E2E2E),
+                                              ),
+                                            ),
+                                          );
+                                        }).toList(),
+                                        onChanged: (String? newValue) {
+                                          setState(() {
+                                            _selectedPropertyType = newValue!;
+                                          });
+                                          if (_selectedLat != null &&
+                                              _selectedLng != null) {
+                                            _searchEstatesByDistance();
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            SizedBox(width: 12.w),
+
+                            // Distance
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Distance',
+                                    style: TextStyle(
+                                      fontSize: 11.sp,
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  SizedBox(height: 6.h),
+                                  TextField(
+                                    controller: _distanceController,
+                                    keyboardType: TextInputType.number,
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: const Color(0xFFF8F6F3),
+                                      border: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10.r),
+                                        borderSide: BorderSide(
+                                          color: const Color(0xFF86755B)
+                                              .withOpacity(0.3),
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10.r),
+                                        borderSide: BorderSide(
+                                          color: const Color(0xFF86755B)
+                                              .withOpacity(0.3),
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10.r),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFF86755B),
+                                        ),
+                                      ),
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 12.w,
+                                        vertical: 12.h,
+                                      ),
+                                      isDense: true,
+                                    ),
+                                    style: TextStyle(fontSize: 13.sp),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            SizedBox(width: 8.w),
+
+                            // Unit
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Unit',
+                                  style: TextStyle(
+                                    fontSize: 11.sp,
+                                    color: Colors.grey[600],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                SizedBox(height: 6.h),
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 10.w, vertical: 8.h),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8F6F3),
+                                    borderRadius: BorderRadius.circular(10.r),
+                                    border: Border.all(
+                                      color: const Color(0xFF86755B)
+                                          .withOpacity(0.3),
+                                    ),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _selectedUnit,
+                                      dropdownColor: Colors.white,
+                                      isDense: true,
+                                      items: _distanceUnits.map((String unit) {
+                                        return DropdownMenuItem<String>(
+                                          value: unit,
+                                          child: Text(
+                                            unit,
+                                            style: TextStyle(fontSize: 13.sp),
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (String? newValue) {
+                                        setState(() {
+                                          _selectedUnit = newValue!;
+                                        });
+                                        if (_selectedLat != null &&
+                                            _selectedLng != null) {
+                                          _searchEstatesByDistance();
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+
+                        SizedBox(height: 16.h),
+
+                        // Search Button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 44.h,
+                          child: ElevatedButton(
+                            onPressed:
+                                _isLoading ? null : _searchEstatesByDistance,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF86755B),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10.r),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: _isLoading
+                                ? Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      SizedBox(
+                                        width: 18.w,
+                                        height: 18.h,
+                                        child: const CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                  Colors.white),
+                                        ),
+                                      ),
+                                      SizedBox(width: 10.w),
+                                      Text(
+                                        'Searching...',
+                                        style: TextStyle(
+                                          fontSize: 14.sp,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.search_rounded, size: 18.sp),
+                                      SizedBox(width: 6.w),
+                                      Text(
+                                        'Search Nearby Properties',
+                                        style: TextStyle(
+                                          fontSize: 14.sp,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ),
-
-                SizedBox(height: 16.h),
-
-                // Search Bar
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search by title, description, or compound...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchController.clear();
-                        if (_selectedLat != null && _selectedLng != null) {
-                          _searchEstatesByDistance();
-                        }
-                      },
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12.r),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                  onSubmitted: (value) {
-                    if (_selectedLat != null && _selectedLng != null) {
-                      _searchEstatesByDistance();
-                    }
-                  },
-                ),
-
-                SizedBox(height: 16.h),
-
-                // Filters Row
-                Row(
-                  children: [
-                    // Property Type Filter
-                    Expanded(
-                      flex: 2,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 12.w),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8.r),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedPropertyType,
-                            isExpanded: true,
-                            items: _propertyTypes.map((String type) {
-                              return DropdownMenuItem<String>(
-                                value: type,
-                                child: Text(type,
-                                    style: TextStyle(fontSize: 14.sp)),
-                              );
-                            }).toList(),
-                            onChanged: (String? newValue) {
-                              setState(() {
-                                _selectedPropertyType = newValue!;
-                              });
-                              if (_selectedLat != null &&
-                                  _selectedLng != null) {
-                                _searchEstatesByDistance();
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    SizedBox(width: 8.w),
-
-                    // Distance Input
-                    Expanded(
-                      child: TextField(
-                        controller: _distanceController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: 'Distance',
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.r),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12.w, vertical: 8.h),
-                        ),
-                        style: TextStyle(fontSize: 14.sp),
-                      ),
-                    ),
-
-                    SizedBox(width: 8.w),
-
-                    // Unit Selector
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8.w),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8.r),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedUnit,
-                          items: _distanceUnits.map((String unit) {
-                            return DropdownMenuItem<String>(
-                              value: unit,
-                              child:
-                                  Text(unit, style: TextStyle(fontSize: 14.sp)),
-                            );
-                          }).toList(),
-                          onChanged: (String? newValue) {
-                            setState(() {
-                              _selectedUnit = newValue!;
-                            });
-                            if (_selectedLat != null && _selectedLng != null) {
-                              _searchEstatesByDistance();
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                SizedBox(height: 16.h),
-
-                // Search Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _searchEstatesByDistance,
-                    icon: _isLoading
-                        ? SizedBox(
-                            width: 16.w,
-                            height: 16.h,
-                            child: const CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Icon(Icons.search_outlined),
-                    label: Text(_isLoading ? 'Searching...' : 'Search Nearby'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF8D6E63),
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 12.h),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8.r),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
 
@@ -489,19 +841,19 @@ class _SearchPageState extends State<SearchPage> {
 
   Widget _buildMapView() {
     return Container(
-      margin: EdgeInsets.all(16.w),
+      margin: EdgeInsets.all(20.w),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12.r),
+        borderRadius: BorderRadius.circular(20.r),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12.r),
+        borderRadius: BorderRadius.circular(20.r),
         child: GoogleMap(
           onMapCreated: (GoogleMapController controller) {
             _mapController = controller;
@@ -520,38 +872,35 @@ class _SearchPageState extends State<SearchPage> {
 
   Widget _buildResultsView() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_searchResults.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.search_off,
-              size: 64.sp,
-              color: Colors.grey[400],
-            ),
-            SizedBox(height: 16.h),
-            Text(
-              _selectedLat == null
-                  ? 'Select a location on map to search'
-                  : 'No estates found',
-              style: TextStyle(
-                fontSize: 18.sp,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
+            Container(
+              padding: EdgeInsets.all(20.w),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 20,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: const CircularProgressIndicator(
+                color: Color(0xFF86755B),
+                strokeWidth: 3,
               ),
             ),
-            SizedBox(height: 8.h),
+            SizedBox(height: 20.h),
             Text(
-              _selectedLat == null
-                  ? 'Tap the map icon to open map view'
-                  : 'Try adjusting your search criteria',
+              'Finding nearby properties...',
               style: TextStyle(
-                fontSize: 14.sp,
-                color: Colors.grey[500],
+                fontSize: 16.sp,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -559,130 +908,224 @@ class _SearchPageState extends State<SearchPage> {
       );
     }
 
-    return ListView.builder(
-      padding: EdgeInsets.all(16.w),
-      itemCount: _searchResults.length,
-      itemBuilder: (context, index) {
-        final estate = _searchResults[index];
-        return EstateSearchCard(estate: estate);
-      },
+    if (_estateIds.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.all(40.w),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: EdgeInsets.all(30.w),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20.r),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  _selectedLat == null
+                      ? Icons.location_searching_rounded
+                      : Icons.home_outlined,
+                  size: 80.sp,
+                  color: const Color(0xFF86755B),
+                ),
+              ),
+              SizedBox(height: 24.h),
+              Text(
+                _selectedLat == null
+                    ? 'Select Your Search Area'
+                    : 'No Properties Found',
+                style: TextStyle(
+                  fontSize: 22.sp,
+                  color: const Color(0xFF2E2E2E),
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 12.h),
+              Text(
+                _selectedLat == null
+                    ? 'Tap the map icon above to open the map and select a location to search for nearby properties.'
+                    : 'Try adjusting your search criteria or selecting a different location on the map.',
+                style: TextStyle(
+                  fontSize: 16.sp,
+                  color: Colors.grey[600],
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.all(20.w),
+          child: Container(
+            padding: EdgeInsets.all(16.w),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF86755B), Color(0xFFA0947C)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12.r),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.list_alt_rounded,
+                  color: Colors.white,
+                  size: 24.sp,
+                ),
+                SizedBox(width: 12.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Found Properties',
+                        style: TextStyle(
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Text(
+                        '${_estateIds.length} properties available',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: EdgeInsets.symmetric(horizontal: 20.w),
+            itemCount: _estateIds.length,
+            itemBuilder: (context, index) {
+              final estateId = _estateIds[index];
+              return EstateIdCard(
+                estateId: estateId,
+                index: index + 1,
+                onTap: () => _navigateToEstateDetails(estateId),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
     _distanceController.dispose();
     _mapController?.dispose();
     super.dispose();
   }
 }
 
-class EstateSearchCard extends StatelessWidget {
-  final Estate estate;
+class EstateIdCard extends StatelessWidget {
+  final String estateId;
+  final int index;
+  final VoidCallback onTap;
 
-  const EstateSearchCard({Key? key, required this.estate}) : super(key: key);
+  const EstateIdCard({
+    Key? key,
+    required this.estateId,
+    required this.index,
+    required this.onTap,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => EstateDetailsScreen(estate: estate),
+    return Container(
+      margin: EdgeInsets.only(bottom: 12.h),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16.r),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
           ),
-        );
-      },
-      child: Container(
-        margin: EdgeInsets.only(bottom: 16.h),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12.r),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Image
-            ClipRRect(
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(12.r),
-                topRight: Radius.circular(12.r),
-              ),
-              child: estate.images.isNotEmpty
-                  ? Image.network(
-                      estate.images.first,
-                      height: 200.h,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          height: 200.h,
-                          color: Colors.grey[200],
-                          child: Icon(
-                            Icons.home,
-                            size: 50.sp,
-                            color: Colors.grey[400],
-                          ),
-                        );
-                      },
-                    )
-                  : Container(
-                      height: 200.h,
-                      color: Colors.grey[200],
-                      child: Icon(
-                        Icons.home,
-                        size: 50.sp,
-                        color: Colors.grey[400],
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16.r),
+          child: Padding(
+            padding: EdgeInsets.all(20.w),
+            child: Row(
+              children: [
+                // Index Circle
+                Container(
+                  width: 50.w,
+                  height: 50.h,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF86755B), Color(0xFFA0947C)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(25.r),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$index',
+                      style: TextStyle(
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
-            ),
-
-            // Content
-            Padding(
-              padding: EdgeInsets.all(16.w),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Title and Price
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          estate.title,
-                          style: TextStyle(
-                            fontSize: 18.sp,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF2E2E2E),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        estate.formattedPrice,
-                        style: TextStyle(
-                          fontSize: 20.sp,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF86755B),
-                        ),
-                      ),
-                    ],
                   ),
+                ),
 
-                  SizedBox(height: 8.h),
+                SizedBox(width: 16.w),
 
-                  // Property Type and Compound
-                  Row(
+                // Estate ID and Details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Text(
+                        'Property ID',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          color: Colors.grey[500],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      SizedBox(height: 4.h),
+                      Text(
+                        estateId,
+                        style: TextStyle(
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF2E2E2E),
+                        ),
+                      ),
+                      SizedBox(height: 8.h),
                       Container(
                         padding: EdgeInsets.symmetric(
                             horizontal: 8.w, vertical: 4.h),
@@ -691,84 +1134,36 @@ class EstateSearchCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(6.r),
                         ),
                         child: Text(
-                          estate.propertyType,
+                          'Tap to view details',
                           style: TextStyle(
-                            fontSize: 12.sp,
+                            fontSize: 11.sp,
                             color: const Color(0xFF86755B),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
-                      if (estate.compoundName.isNotEmpty) ...[
-                        SizedBox(width: 8.w),
-                        Expanded(
-                          child: Text(
-                            estate.compoundName,
-                            style: TextStyle(
-                              fontSize: 14.sp,
-                              color: Colors.grey[600],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
+                ),
 
-                  SizedBox(height: 12.h),
-
-                  // Room Details
-                  Row(
-                    children: [
-                      _buildRoomInfo(Icons.bed, '${estate.bedrooms}', 'Bed'),
-                      SizedBox(width: 16.w),
-                      _buildRoomInfo(
-                          Icons.bathtub, '${estate.bathrooms}', 'Bath'),
-                      SizedBox(width: 16.w),
-                      _buildRoomInfo(
-                          Icons.square_foot, estate.formattedArea, ''),
-                    ],
+                // Arrow Icon
+                Container(
+                  padding: EdgeInsets.all(8.w),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF86755B).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8.r),
                   ),
-
-                  SizedBox(height: 12.h),
-
-                  // Description
-                  if (estate.description.isNotEmpty)
-                    Text(
-                      estate.description,
-                      style: TextStyle(
-                        fontSize: 14.sp,
-                        color: Colors.grey[600],
-                        height: 1.4,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                ],
-              ),
+                  child: Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: const Color(0xFF86755B),
+                    size: 16.sp,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRoomInfo(IconData icon, String value, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 16.sp, color: Colors.grey[600]),
-        SizedBox(width: 4.w),
-        Text(
-          '$value${label.isNotEmpty ? ' $label' : ''}',
-          style: TextStyle(
-            fontSize: 14.sp,
-            color: Colors.grey[700],
-            fontWeight: FontWeight.w500,
           ),
         ),
-      ],
+      ),
     );
   }
 }
