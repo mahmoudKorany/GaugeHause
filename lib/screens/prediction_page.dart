@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:gauge_haus/screens/prediction_result_screen.dart';
+import 'package:gauge_haus/shared/dio_helper.dart';
+import 'package:gauge_haus/shared/url_constants.dart';
+import 'package:gauge_haus/shared/cache_helper.dart';
 
 class PredictionPage extends StatefulWidget {
   const PredictionPage({Key? key}) : super(key: key);
@@ -16,13 +19,12 @@ class _PredictionPageState extends State<PredictionPage>
   final _areaController = TextEditingController();
   final _bedroomsController = TextEditingController();
   final _bathroomsController = TextEditingController();
-  final _ageController = TextEditingController();
+  final _levelController = TextEditingController();
 
-  String _selectedType = 'Villa';
-  String _selectedLocation = 'Cairo';
-  String _selectedCondition = 'Excellent';
-  bool _hasGarden = false;
-  bool _hasParking = false;
+  String _selectedType = 'Apartment';
+  String _selectedLocation = 'Sheikh Zayed';
+  String _selectedFurnished = 'Yes';
+  String _selectedDeliveryTerm = 'Finished';
   bool _isLoading = false;
   String? _predictedPrice;
 
@@ -31,27 +33,26 @@ class _PredictionPageState extends State<PredictionPage>
   late Animation<Offset> _slideAnimation;
 
   final List<String> _propertyTypes = [
-    'Villa',
     'Apartment',
+    'Villa',
     'House',
     'Studio',
     'Penthouse'
   ];
   final List<String> _locations = [
+    'Sheikh Zayed',
+    'New Cairo',
     'Cairo',
     'Giza',
     'Alexandria',
-    'New Cairo',
-    'Sheikh Zayed',
     'Maadi',
     'Zamalek'
   ];
-  final List<String> _conditions = [
-    'Excellent',
-    'Very Good',
-    'Good',
-    'Fair',
-    'Needs Renovation'
+  final List<String> _furnishedOptions = ['Yes', 'No'];
+  final List<String> _deliveryTerms = [
+    'Finished',
+    'Under Construction',
+    'Core and Shell'
   ];
 
   @override
@@ -91,7 +92,7 @@ class _PredictionPageState extends State<PredictionPage>
     _areaController.dispose();
     _bedroomsController.dispose();
     _bathroomsController.dispose();
-    _ageController.dispose();
+    _levelController.dispose();
     super.dispose();
   }
 
@@ -105,90 +106,74 @@ class _PredictionPageState extends State<PredictionPage>
       _predictedPrice = null;
     });
 
-    // Simulate AI prediction process
-    await Future.delayed(const Duration(seconds: 3));
+    try {
+      // Prepare data in the required format
+      final predictionData = {
+        "city": _selectedLocation,
+        "property_type": _selectedType,
+        "furnished": _selectedFurnished,
+        "delivery_term": _selectedDeliveryTerm,
+        "bedrooms": int.tryParse(_bedroomsController.text) ?? 0,
+        "bathrooms": int.tryParse(_bathroomsController.text) ?? 0,
+        "area": double.tryParse(_areaController.text) ?? 0.0,
+        "level": int.tryParse(_levelController.text) ?? 1,
+      };
 
-    // Simulate price calculation based on inputs
-    double basePrice = 1000000; // Base price
-    double area = double.tryParse(_areaController.text) ?? 100;
-    int bedrooms = int.tryParse(_bedroomsController.text) ?? 2;
-    int bathrooms = int.tryParse(_bathroomsController.text) ?? 1;
-    int age = int.tryParse(_ageController.text) ?? 5;
+      // Get user token for authentication
+      final token = await CacheHelper.getData(key: 'token');
 
-    // Simple calculation simulation
-    double calculatedPrice =
-        basePrice + (area * 8000) + (bedrooms * 150000) + (bathrooms * 100000);
-
-    // Adjust based on location
-    switch (_selectedLocation) {
-      case 'New Cairo':
-      case 'Sheikh Zayed':
-        calculatedPrice *= 1.5;
-        break;
-      case 'Zamalek':
-      case 'Maadi':
-        calculatedPrice *= 1.3;
-        break;
-      case 'Alexandria':
-        calculatedPrice *= 0.7;
-        break;
-    }
-
-    // Adjust based on condition
-    switch (_selectedCondition) {
-      case 'Excellent':
-        calculatedPrice *= 1.2;
-        break;
-      case 'Very Good':
-        calculatedPrice *= 1.1;
-        break;
-      case 'Fair':
-        calculatedPrice *= 0.9;
-        break;
-      case 'Needs Renovation':
-        calculatedPrice *= 0.7;
-        break;
-    }
-
-    // Adjust based on age
-    calculatedPrice -= (age * 20000);
-
-    // Add extras
-    if (_hasGarden) calculatedPrice += 200000;
-    if (_hasParking) calculatedPrice += 150000;
-
-    final String formattedPrice =
-        '${(calculatedPrice / 1000).toStringAsFixed(0)},000 L.E';
-
-    setState(() {
-      _isLoading = false;
-      _predictedPrice = formattedPrice;
-    });
-
-    _showSuccessMessage();
-
-    // Navigate to result screen after short delay
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PredictionResultScreen(
-            predictedPrice: formattedPrice,
-            propertyData: {
-              'type': _selectedType,
-              'location': _selectedLocation,
-              'area': _areaController.text,
-              'bedrooms': _bedroomsController.text,
-              'bathrooms': _bathroomsController.text,
-              'condition': _selectedCondition,
-              'age': _ageController.text,
-              'hasGarden': _hasGarden,
-              'hasParking': _hasParking,
-            },
-          ),
-        ),
+      // Make API call to prediction endpoint
+      final response = await DioHelper.postData(
+        url: UrlConstants.makePredictionOfPrice,
+        data: predictionData,
+        token: token,
       );
-    });
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        // Extract predicted price from response
+        final responseData = response.data;
+        final predictedPrice =
+            responseData['predicted_price'] ?? responseData['price'];
+
+        setState(() {
+          _isLoading = false;
+          _predictedPrice = '${predictedPrice.toStringAsFixed(0)} L.E';
+        });
+
+        _showSuccessMessage();
+
+        // Navigate to result screen after short delay
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PredictionResultScreen(
+                predictedPrice: _predictedPrice!,
+                propertyData: {
+                  'type': _selectedType,
+                  'location': _selectedLocation,
+                  'area': _areaController.text,
+                  'bedrooms': _bedroomsController.text,
+                  'bathrooms': _bathroomsController.text,
+                  'level': _levelController.text,
+                  'furnished': _selectedFurnished,
+                  'deliveryTerm': _selectedDeliveryTerm,
+                },
+              ),
+            ),
+          );
+        });
+      } else {
+        throw Exception('Failed to get prediction: ${response.statusMessage}');
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      _showErrorMessage('Failed to predict price. Please try again.');
+      print('Prediction error: $e');
+    }
   }
 
   void _showSuccessMessage() {
@@ -196,6 +181,17 @@ class _PredictionPageState extends State<PredictionPage>
       SnackBar(
         content: const Text('Price prediction completed successfully!'),
         backgroundColor: const Color(0xFF8D6E63),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  void _showErrorMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -237,16 +233,14 @@ class _PredictionPageState extends State<PredictionPage>
                               Expanded(child: _buildBathroomsField()),
                             ],
                           ),
+                          SizedBox(height: 16.h),
+                          _buildLevelField(),
                           SizedBox(height: 24.h),
-                          _buildSectionTitle('Property Condition'),
+                          _buildSectionTitle('Property Status'),
                           SizedBox(height: 16.h),
-                          _buildConditionDropdown(),
+                          _buildFurnishedDropdown(),
                           SizedBox(height: 16.h),
-                          _buildAgeField(),
-                          SizedBox(height: 24.h),
-                          _buildSectionTitle('Additional Features'),
-                          SizedBox(height: 16.h),
-                          _buildCheckboxes(),
+                          _buildDeliveryTermDropdown(),
                           SizedBox(height: 32.h),
                           _buildPredictButton(),
                           if (_predictedPrice != null) ...[
@@ -434,34 +428,14 @@ class _PredictionPageState extends State<PredictionPage>
     );
   }
 
-  Widget _buildConditionDropdown() {
-    return DropdownButtonFormField<String>(
-      value: _selectedCondition,
-      decoration: InputDecoration(
-        labelText: 'Property Condition',
-        prefixIcon: const Icon(Icons.star_rounded),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r)),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12.r),
-          borderSide: const BorderSide(color: Color(0xFF8D6E63)),
-        ),
-      ),
-      items: _conditions.map((condition) {
-        return DropdownMenuItem(value: condition, child: Text(condition));
-      }).toList(),
-      onChanged: (value) => setState(() => _selectedCondition = value!),
-    );
-  }
-
-  Widget _buildAgeField() {
+  Widget _buildLevelField() {
     return TextFormField(
-      controller: _ageController,
+      controller: _levelController,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       decoration: InputDecoration(
-        labelText: 'Property Age (Years)',
-        prefixIcon: const Icon(Icons.calendar_today_rounded),
-        suffixText: 'years',
+        labelText: 'Floor Level',
+        prefixIcon: const Icon(Icons.layers_rounded),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12.r),
@@ -470,35 +444,51 @@ class _PredictionPageState extends State<PredictionPage>
       ),
       validator: (value) {
         if (value == null || value.isEmpty) {
-          return 'Please enter the property age';
+          return 'Please enter the floor level';
+        }
+        if (int.tryParse(value) == null || int.parse(value) <= 0) {
+          return 'Please enter a valid floor level';
         }
         return null;
       },
     );
   }
 
-  Widget _buildCheckboxes() {
-    return Column(
-      children: [
-        CheckboxListTile(
-          title: Text('Has Garden', style: TextStyle(fontSize: 16.sp)),
-          subtitle:
-              Text('Private garden or yard', style: TextStyle(fontSize: 14.sp)),
-          value: _hasGarden,
-          onChanged: (value) => setState(() => _hasGarden = value!),
-          activeColor: const Color(0xFF8D6E63),
-          contentPadding: EdgeInsets.zero,
+  Widget _buildFurnishedDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedFurnished,
+      decoration: InputDecoration(
+        labelText: 'Furnished Status',
+        prefixIcon: const Icon(Icons.chair_rounded),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r)),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12.r),
+          borderSide: const BorderSide(color: Color(0xFF8D6E63)),
         ),
-        CheckboxListTile(
-          title: Text('Has Parking', style: TextStyle(fontSize: 16.sp)),
-          subtitle:
-              Text('Private parking space', style: TextStyle(fontSize: 14.sp)),
-          value: _hasParking,
-          onChanged: (value) => setState(() => _hasParking = value!),
-          activeColor: const Color(0xFF8D6E63),
-          contentPadding: EdgeInsets.zero,
+      ),
+      items: _furnishedOptions.map((option) {
+        return DropdownMenuItem(value: option, child: Text(option));
+      }).toList(),
+      onChanged: (value) => setState(() => _selectedFurnished = value!),
+    );
+  }
+
+  Widget _buildDeliveryTermDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedDeliveryTerm,
+      decoration: InputDecoration(
+        labelText: 'Delivery Term',
+        prefixIcon: const Icon(Icons.construction_rounded),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r)),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12.r),
+          borderSide: const BorderSide(color: Color(0xFF8D6E63)),
         ),
-      ],
+      ),
+      items: _deliveryTerms.map((term) {
+        return DropdownMenuItem(value: term, child: Text(term));
+      }).toList(),
+      onChanged: (value) => setState(() => _selectedDeliveryTerm = value!),
     );
   }
 

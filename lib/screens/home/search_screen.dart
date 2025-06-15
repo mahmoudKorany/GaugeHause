@@ -7,7 +7,6 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:gauge_haus/models/estate_model.dart';
 import 'package:gauge_haus/models/user_model.dart';
 import 'package:gauge_haus/shared/dio_helper.dart';
 import 'package:gauge_haus/shared/cache_helper.dart';

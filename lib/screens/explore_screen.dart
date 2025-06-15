@@ -3,9 +3,7 @@ import 'package:gauge_haus/shared/dio_helper.dart';
 import 'package:gauge_haus/shared/url_constants.dart';
 import 'package:gauge_haus/shared/cache_helper.dart';
 import 'package:gauge_haus/app_cubit/app_cubit.dart';
-import 'package:gauge_haus/models/estate_model.dart';
 import 'package:gauge_haus/screens/estate_details_screen.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
 class InboxPage extends StatelessWidget {
   const InboxPage({Key? key}) : super(key: key);
