@@ -44,10 +44,10 @@ class _ExplorePageState extends State<ExplorePage> {
         url: UrlConstants.getAllEstates,
         token: CacheHelper.getData(key: 'token'),
         query: {
-          'page': '2',
-          'limit': '1',
-          'sort': '-likes',
-          'fields': 'name,likes'
+          // 'page': '2',
+          // 'limit': '1',
+          // 'sort': '-likes',
+          // 'fields': 'name,likes'
         },
       );
 

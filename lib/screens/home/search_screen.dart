@@ -237,7 +237,8 @@ class _SearchPageState extends State<SearchPage> {
           PageRouteBuilder(
             pageBuilder: (context, animation, secondaryAnimation) =>
                 EstateDetailsScreen(estate: estate),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
               const begin = Offset(1.0, 0.0);
               const end = Offset.zero;
               const curve = Curves.easeInOutCubic;
@@ -327,9 +328,9 @@ class _SearchPageState extends State<SearchPage> {
                   ],
                 ),
               ),
-              
+
               SizedBox(height: 24.h),
-              
+
               // Title
               Text(
                 'Loading Property',
@@ -339,9 +340,9 @@ class _SearchPageState extends State<SearchPage> {
                   color: const Color(0xFF2E2E2E),
                 ),
               ),
-              
+
               SizedBox(height: 8.h),
-              
+
               // Subtitle with property ID
               Container(
                 padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
@@ -358,9 +359,9 @@ class _SearchPageState extends State<SearchPage> {
                   ),
                 ),
               ),
-              
+
               SizedBox(height: 16.h),
-              
+
               // Loading message
               Text(
                 'Fetching property details...',
@@ -371,9 +372,9 @@ class _SearchPageState extends State<SearchPage> {
                 ),
                 textAlign: TextAlign.center,
               ),
-              
+
               SizedBox(height: 20.h),
-              
+
               // Progress dots animation
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -383,7 +384,8 @@ class _SearchPageState extends State<SearchPage> {
                     width: 8.w,
                     height: 8.h,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF86755B).withOpacity(0.3 + (index * 0.2)),
+                      color: const Color(0xFF86755B)
+                          .withOpacity(0.3 + (index * 0.2)),
                       borderRadius: BorderRadius.circular(4.r),
                     ),
                   );
